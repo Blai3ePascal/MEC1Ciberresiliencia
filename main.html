@@ -1,0 +1,1596 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>El Guardián de Activos - Protocolo Resiliencia</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        /* --- VARIABLES DE TEMA --- */
+        :root {
+            /* Default: Ciberpunk (Dark) */
+            --bg-color: #0f172a;
+            --text-color: #38bdf8;
+            --accent-color: #22d3ee;
+            --danger-color: #ef4444;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --panel-bg: rgba(15, 23, 42, 0.95);
+            --grid-color: #1e293b;
+            --font-main: 'Courier New', monospace;
+            --filter-fx: none;
+        }
+
+        [data-theme="solarized"] {
+            /* Solarized Light */
+            --bg-color: #fdf6e3;
+            --text-color: #002b36;
+            --accent-color: #268bd2;
+            --danger-color: #dc322f;
+            --success-color: #859900;
+            --warning-color: #b58900;
+            --panel-bg: rgba(253, 246, 227, 0.95);
+            --grid-color: #93a1a1;
+            --filter-fx: none;
+        }
+
+        [data-theme="eclipse"] {
+            /* Escala de Grises */
+            --bg-color: #000000;
+            --text-color: #ffffff;
+            --accent-color: #ffffff;
+            --danger-color: #ffffff;
+            --success-color: #ffffff;
+            --warning-color: #ffffff;
+            --panel-bg: #000000;
+            --grid-color: #333333;
+            --filter-fx: grayscale(100%) contrast(1.2);
+        }
+
+        /* --- GENERAL --- */
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: var(--font-main);
+            transition: background-color 0.3s, color 0.3s;
+            filter: var(--filter-fx);
+            user-select: none;
+        }
+
+        #game-ui {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+        }
+
+        /* --- BARRA SUPERIOR --- */
+        #top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 60px;
+            background: var(--panel-bg);
+            border-bottom: 1px solid var(--accent-color);
+            padding: 0 20px;
+            pointer-events: auto;
+            z-index: 10;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+
+        .metric-group { display: flex; gap: 20px; align-items: center; }
+        .metric { text-align: center; }
+        .metric span { font-size: 0.7em; opacity: 0.8; display: block; }
+        .metric val { font-size: 1.2em; font-weight: bold; }
+
+        /* --- BOTONES SUPERIORES --- */
+        .top-btn {
+            width: 35px; height: 35px;
+            border-radius: 50%;
+            background: transparent;
+            border: 1px solid var(--accent-color);
+            color: var(--accent-color);
+            font-size: 1.1em;
+            cursor: pointer;
+            display: flex; justify-content: center; align-items: center;
+            transition: all 0.2s;
+            font-family: var(--font-main);
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .top-btn:hover { background: var(--accent-color); color: var(--bg-color); transform: scale(1.1); }
+
+        /* --- PANEL INTELIGENCIA (ARRIBA IZQUIERDA) --- */
+        #intel-panel {
+            position: absolute;
+            top: 70px;
+            left: 20px;
+            width: 200px;
+            background: var(--panel-bg);
+            border: 1px solid var(--warning-color);
+            border-radius: 4px;
+            padding: 10px;
+            pointer-events: auto;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        #intel-header {
+            font-size: 0.8em;
+            color: var(--warning-color);
+            border-bottom: 1px solid var(--warning-color);
+            margin-bottom: 5px;
+            padding-bottom: 3px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .intel-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 5px;
+            font-size: 0.85em;
+        }
+        .intel-level {
+            margin-left: auto;
+            font-weight: bold;
+            color: var(--accent-color);
+        }
+
+        /* --- LOG PANEL --- */
+        #log-panel {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 300px;
+            height: 180px;
+            background: var(--panel-bg);
+            border: 1px solid var(--grid-color);
+            border-left: 4px solid var(--accent-color);
+            overflow-y: auto;
+            font-size: 0.75em;
+            padding: 10px;
+            pointer-events: auto;
+            border-radius: 4px;
+        }
+        .log-entry { margin-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 2px; }
+        .log-warn { color: var(--danger-color); font-weight: bold; }
+        .log-success { color: var(--success-color); }
+
+        /* --- BARRA DE CONTROLES (ABAJO IZQUIERDA) --- */
+        #controls-bar {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: var(--panel-bg);
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid var(--accent-color);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            pointer-events: auto;
+            box-shadow: 0 0 15px rgba(0,0,0,0.5);
+            width: 240px;
+        }
+
+        .control-row { display: flex; gap: 5px; }
+        
+        .btn {
+            flex: 1;
+            background: rgba(255,255,255,0.05);
+            color: var(--text-color);
+            border: 1px solid var(--accent-color);
+            padding: 10px 5px;
+            cursor: pointer;
+            font-family: var(--font-main);
+            font-weight: bold;
+            text-transform: uppercase;
+            font-size: 0.7em;
+            transition: all 0.2s;
+            border-radius: 2px;
+        }
+        .btn:hover { background: var(--accent-color); color: var(--bg-color); }
+        .btn.selected { 
+            background: var(--accent-color); 
+            color: var(--bg-color); 
+            box-shadow: 0 0 10px var(--accent-color);
+            transform: scale(1.05);
+        }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; border-color: #555; }
+
+        .btn-start {
+            background: var(--accent-color);
+            color: var(--bg-color);
+            font-size: 1em;
+            margin-top: 5px;
+            padding: 12px;
+        }
+
+        /* --- MODALES --- */
+        #modal-overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            pointer-events: auto;
+            z-index: 999;
+            backdrop-filter: blur(5px);
+        }
+
+        .modal-content {
+            background: var(--bg-color);
+            border: 2px solid var(--accent-color);
+            padding: 40px;
+            max-width: 800px;
+            width: 95%;
+            max-height: 95vh;
+            overflow-y: auto;
+            color: var(--text-color);
+            box-shadow: 0 0 50px var(--accent-color);
+            text-align: center;
+            position: relative;
+        }
+
+        /* Tutorial Grid */
+        .tut-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; text-align: left; margin-bottom: 20px; }
+        .tut-card { border: 1px solid var(--grid-color); padding: 10px; border-radius: 4px; font-size: 0.9em; }
+        .tut-card h4 { margin: 0 0 10px 0; color: var(--accent-color); border-bottom: 1px solid var(--grid-color); padding-bottom: 5px;}
+        
+        .tut-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+        .tut-desc { font-size: 0.85em; opacity: 0.9; }
+
+        /* Report Grid */
+        .report-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; text-align: left; margin: 20px 0; }
+        .report-section { background: rgba(255,255,255,0.05); padding: 15px; border-radius: 5px; }
+        .report-label { font-weight: bold; color: var(--accent-color); font-size: 0.9em; }
+        .report-value { font-size: 1.1em; margin-bottom: 10px; font-family: monospace; }
+        .report-insight { grid-column: 1 / -1; background: rgba(16, 185, 129, 0.1); border-left: 4px solid var(--success-color); padding: 15px; font-style: italic; margin-top: 10px; font-size: 1.1em; line-height: 1.5; }
+
+        /* Tooltip */
+        #tooltip {
+            position: absolute;
+            background: rgba(15, 23, 42, 0.95);
+            border: 1px solid var(--accent-color);
+            color: var(--text-color);
+            padding: 10px;
+            pointer-events: none;
+            display: none;
+            font-size: 0.8em;
+            z-index: 100;
+            border-radius: 4px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        /* Controles de Zoom (Arriba Derecha) */
+        #zoom-controls {
+            position: absolute;
+            top: 70px;
+            right: 20px;
+            display: flex;
+            gap: 5px;
+            pointer-events: auto;
+            background: var(--panel-bg);
+            padding: 5px;
+            border-radius: 4px;
+            border: 1px solid var(--grid-color);
+        }
+        .zoom-btn {
+            width: 30px; height: 30px;
+            background: transparent;
+            border: 1px solid var(--accent-color);
+            color: var(--text-color);
+            cursor: pointer;
+            font-weight: bold;
+            display: flex; justify-content: center; align-items: center;
+            font-size: 1.2em;
+        }
+        .zoom-btn:hover { background: var(--accent-color); color: var(--bg-color); }
+
+        /* Elementos Visuales CSS */
+        .icon-box { width: 30px; height: 30px; display: flex; justify-content: center; align-items: center; border-radius: 4px; font-weight: bold;}
+        .vis-infra { border: 2px solid #64748b; background: transparent; width: 20px; height: 20px;} 
+        .vis-info { border: 2px solid #0ea5e9; transform: rotate(45deg); width: 16px; height: 16px; margin: 5px; } 
+        
+        .vis-enemy-ddos { background: var(--danger-color); border-radius: 50%; width: 20px; height: 20px;}
+        .vis-enemy-apt { background: #d946ef; border-radius: 50%; border: 2px dashed #fff; width: 20px; height: 20px;}
+        .vis-enemy-ransom { background: #84cc16; border-radius: 2px; width: 20px; height: 20px;}
+
+        /* Torres Visuales */
+        .vis-tower-fw { border: 2px solid var(--warning-color); color: var(--warning-color); }
+        .vis-tower-iam { border: 2px solid #8b5cf6; color: #8b5cf6; }
+        .vis-tower-enc { border: 2px solid var(--success-color); color: var(--success-color); }
+
+        /* Clasificación */
+        .class-row {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 10px; border-bottom: 1px solid var(--grid-color);
+            text-align: left;
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="gameCanvas"></canvas>
+    <div id="tooltip"></div>
+
+    <div id="game-ui">
+        
+        <!-- Barra Superior -->
+        <div id="top-bar">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <button class="top-btn" onclick="window.confirmReset()" title="Reiniciar Simulación" style="border-color: var(--text-color);">🛡️</button>
+                <div>
+                    <h2 style="margin:0; font-size:1.2em;">RESILIENCIA PROTOCOL</h2>
+                    <small id="round-display" style="color:var(--success-color)">Ronda 1 / 20</small>
+                </div>
+                <button class="top-btn" onclick="window.showTutorial()" title="Manual de Ayuda">?</button>
+                <button class="top-btn" id="theme-btn" onclick="window.cycleTheme()" title="Cambiar Tema">🌙</button>
+            </div>
+            
+            <!-- ACIDA -->
+            <div class="metric-group">
+                <div class="metric"><span title="Autenticación">A</span><val id="val-A">100%</val></div>
+                <div class="metric"><span title="Confidencialidad">C</span><val id="val-C">100%</val></div>
+                <div class="metric"><span title="Integridad">I</span><val id="val-I">100%</val></div>
+                <div class="metric"><span title="Disponibilidad">D</span><val id="val-D">100%</val></div>
+                <div class="metric"><span title="Trazabilidad">A</span><val id="val-Acc">100%</val></div>
+            </div>
+
+            <!-- Recursos -->
+            <div class="metric-group">
+                <div class="metric"><span>CRÉDITOS</span><val id="money-display" style="color:var(--warning-color)">3000</val></div>
+                <div class="metric"><span>INTEGRIDAD</span><val id="health-display">100%</val></div>
+            </div>
+        </div>
+
+        <!-- Log -->
+        <div id="log-panel">
+            <div class="log-entry" style="color:var(--success-color)">> Sistema en línea.</div>
+            <div id="logs-container"></div>
+        </div>
+
+        <!-- Panel Inteligencia (ARRIBA IZQUIERDA) -->
+        <div id="intel-panel">
+            <div id="intel-header">INTELIGENCIA AMENAZAS</div>
+            <div id="intel-content"></div>
+        </div>
+
+        <!-- Controles Zoom (ARRIBA DERECHA) -->
+        <div id="zoom-controls">
+            <button class="zoom-btn" onclick="window.zoomIn()">+</button>
+            <button class="zoom-btn" onclick="window.resetZoom()" style="font-size:0.6em">1:1</button>
+            <button class="zoom-btn" onclick="window.zoomOut()">-</button>
+        </div>
+
+        <!-- Panel de Mando (Izquierda Abajo) -->
+        <div id="controls-bar" style="display:none;">
+            <div style="text-align:center; margin-bottom:10px; font-size:0.9em; border-bottom:1px solid var(--grid-color); padding-bottom:5px;">DEFENSAS</div>
+            
+            <div class="control-row">
+                <button class="btn" onclick="window.setTool('firewall')" title="Bloquea Ataques de Red (DDoS)">
+                    🔥 FW<br><small>200 CR</small>
+                </button>
+                <button class="btn" onclick="window.setTool('iam')" title="Bloquea Accesos Indebidos (APT)">
+                    🛡️ IAM<br><small>300 CR</small>
+                </button>
+            </div>
+            
+            <div class="control-row">
+                <button class="btn" onclick="window.setTool('encrypt')" title="Protege Confidencialidad de Datos">
+                    🔒 CIFRAR<br><small>150 CR</small>
+                </button>
+                <button class="btn" onclick="window.purchaseBackup()" id="btn-backup" title="Permite recuperación tras fallo físico">
+                    💾 BACKUP<br><small>500 CR</small>
+                </button>
+            </div>
+
+            <div style="margin:10px 0; font-size:0.7em; color:var(--warning-color); text-align:center;">
+                [CLICK] Torre para Mejorar<br>
+                [CLICK DCHO] Cancelar
+            </div>
+
+            <button class="btn btn-start" onclick="window.startWave()">INICIAR OLEADA</button>
+        </div>
+
+        <!-- MODAL: Tutorial Táctico -->
+        <div id="modal-tutorial" class="modal-overlay">
+            <div id="modal-overlay">
+                <div class="modal-content">
+                    <h1 style="margin-top:0;">PROTOCOLO DE DEFENSA: MANUAL</h1>
+                    <p>Su misión: Garantizar la continuidad operativa durante <strong>20 Rondas</strong> de ciberataques evolutivos.</p>
+                    
+                    <div class="tut-grid">
+                        <div class="tut-card">
+                            <h4>💀 AMENAZAS DETECTADAS</h4>
+                            <div class="tut-row">
+                                <div class="icon-box vis-enemy-ddos"></div>
+                                <div>
+                                    <strong>DDoS (Red)</strong>
+                                    <div class="tut-desc">Ataca: <strong>Disponibilidad (D)</strong><br>Objetivo: Infraestructura</div>
+                                </div>
+                            </div>
+                            <div class="tut-row">
+                                <div class="icon-box vis-enemy-apt"></div>
+                                <div>
+                                    <strong>APT (Sigiloso)</strong>
+                                    <div class="tut-desc">Ataca: <strong>Confidencialidad (C)</strong><br>Objetivo: Información (Joyas)</div>
+                                </div>
+                            </div>
+                            <div class="tut-row">
+                                <div class="icon-box vis-enemy-ransom"></div>
+                                <div>
+                                    <strong>Ransomware</strong>
+                                    <div class="tut-desc">Ataca: <strong>Integridad (I)</strong><br>Objetivo: Información (Datos)</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="tut-card">
+                            <h4>🛡️ ARSENAL DEFENSIVO</h4>
+                            <div class="tut-row">
+                                <div class="icon-box vis-tower-fw">🔥</div>
+                                <div>
+                                    <strong>Firewall</strong>
+                                    <div class="tut-desc">Defiende: <strong>Infraestructura</strong><br>Bloquea ataques DDoS masivos</div>
+                                </div>
+                            </div>
+                            <div class="tut-row">
+                                <div class="icon-box vis-tower-iam">🛡️</div>
+                                <div>
+                                    <strong>IAM / Auth</strong>
+                                    <div class="tut-desc">Defiende: <strong>Identidad (A)</strong><br>Bloquea intrusiones APT</div>
+                                </div>
+                            </div>
+                            <div class="tut-row">
+                                <div class="icon-box vis-tower-enc">🔒</div>
+                                <div>
+                                    <strong>Cifrado</strong>
+                                    <div class="tut-desc">Defiende: <strong>Confidencialidad (C)</strong><br>Mitiga impacto de Ransomware</div>
+                                </div>
+                            </div>
+                            <div class="tut-row">
+                                <div class="icon-box" style="border:2px solid var(--success-color); color:var(--success-color)">💾</div>
+                                <div>
+                                    <strong>Backup</strong>
+                                    <div class="tut-desc">Defiende: <strong>Recuperación</strong><br>Única salvación ante Fallo Físico</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="tut-card" style="text-align:left; margin-bottom:20px;">
+                        <h4>⚖️ MECÁNICA DE NIVELES</h4>
+                        <p style="font-size:0.9em; margin:5px 0;">
+                            Los enemigos evolucionan. Las defensas deben evolucionar.
+                        </p>
+                        <ul style="font-size:0.9em; padding-left:20px; margin:5px 0;">
+                            <li><strong>Defensa Nvl >= Enemigo Nvl:</strong> Daño Crítico (Insta-kill o rápido).</li>
+                            <li><strong>Defensa Nvl < Enemigo Nvl:</strong> Daño Reducido (Desgaste lento).</li>
+                            <li><strong>Acción:</strong> Haz Click en una torre instalada para subirla de nivel (Coste en Créditos).</li>
+                        </ul>
+                    </div>
+
+                    <div style="font-size:0.8em; color:var(--accent-color);">
+                        * Use <strong>Arrastrar (Mouse/Touchpad)</strong> para mover el mapa y los botones de Zoom (+/-) para ajustar la vista.
+                    </div>
+
+                    <button id="btn-tut-action" class="btn btn-start" style="margin-top:20px; width:100%;" onclick="window.startClassificationPhase()">INICIAR PROTOCOLO</button>
+                    <button id="btn-tut-close" class="btn" style="margin-top:10px; width:100%; display:none;" onclick="window.closeTutorial()">VOLVER AL JUEGO</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="modal-classification" style="display:none;">
+            <div id="modal-overlay">
+                <div class="modal-content">
+                    <h2>FASE 1: ANÁLISIS ONTOLÓGICO</h2>
+                    <p>Clasifique los activos para calibrar los sensores de defensa.</p>
+                    <div id="classification-list" style="margin:20px 0;"></div>
+                    <button class="btn btn-start" style="width:100%;" onclick="window.validateClassification()">CONFIRMAR CLASIFICACIÓN</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="modal-endround" style="display:none;">
+            <div id="modal-overlay">
+                <div class="modal-content">
+                    <h2 id="end-title">INFORME TÁCTICO - RONDA FINALIZADA</h2>
+                    <div id="end-id" style="font-size:0.8em; color:var(--accent-color); margin-bottom:10px;"></div>
+                    <p id="end-msg" style="opacity:0.8; margin-bottom:20px;"></p>
+                    
+                    <div class="report-grid">
+                        <div class="report-section">
+                            <div class="report-label">TOPOLOGÍA PROTEGIDA</div>
+                            <div id="stat-topology" class="report-value"></div>
+                            <div class="report-label">INFRAESTRUCTURA INTACTA</div>
+                            <div id="stat-health" class="report-value"></div>
+                        </div>
+                        <div class="report-section">
+                            <div class="report-label">INVERSIÓN EN DEFENSA</div>
+                            <div id="stat-investment" class="report-value"></div>
+                            <div class="report-label">DEFENSAS ACTIVAS</div>
+                            <div id="stat-defenses" class="report-value"></div>
+                        </div>
+                        <div class="report-section" style="grid-column: 1 / -1;">
+                            <div class="report-label">COMBATE: AMENAZAS NEUTRALIZADAS</div>
+                            <div id="stat-combat" class="report-value" style="color:var(--accent-color)"></div>
+                        </div>
+                        
+                        <div id="pedagogical-insight" class="report-insight"></div>
+                    </div>
+
+                    <div style="display:flex; gap:10px;">
+                         <button id="btn-download-pdf" class="btn" style="flex:1; border-color:var(--success-color); display:none;" onclick="window.generatePDFReport(false)">📥 FORZAR DESCARGA PDF</button>
+                         <button id="next-round-btn" class="btn btn-start" style="flex:1;" onclick="window.nextRound()">SIGUIENTE RONDA</button>
+                    </div>
+                   
+                </div>
+            </div>
+        </div>
+
+        <div id="modal-reset" style="display:none;">
+            <div id="modal-overlay">
+                <div class="modal-content" style="max-width:400px;">
+                    <h2>¿REINICIAR SIMULACIÓN?</h2>
+                    <p>Se perderá todo el progreso y volverás a la Ronda 1.</p>
+                    <div style="display:flex; gap:10px; margin-top:20px;">
+                        <button class="btn btn-start" style="flex:1; background:var(--danger-color);" onclick="window.resetGame()">SÍ, REINICIAR</button>
+                        <button class="btn" style="flex:1;" onclick="document.getElementById('modal-reset').style.display='none'">CANCELAR</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+<script>
+(function() {
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const tooltip = document.getElementById('tooltip');
+    
+    let w, h;
+    
+    let scale = 1;
+    let offsetX = 0;
+    let offsetY = 0;
+    let isDragging = false;
+    let startDragX, startDragY;
+
+    let worldMX = 0;
+    let worldMY = 0;
+
+    let game = {
+        state: 'INIT',
+        round: 1,
+        maxRounds: 20,
+        money: 3000, 
+        health: 100,
+        backup: false,
+        metrics: { A: 100, C: 100, I: 100, D: 100, Acc: 100 },
+        assets: [],
+        towers: [],
+        enemies: [],
+        projectiles: [],
+        particles: [],
+        selectedTool: null,
+        lastTime: 0,
+        spawnTimer: 0,
+        enemiesToSpawn: 0,
+        mapWidth: 2000,
+        mapHeight: 1500,
+        roundStats: {
+            enemiesKilled: 0,
+            damageTaken: 0,
+            moneySpent: 0,
+            towersBuilt: 0,
+            enemiesSpawnedTotal: 0,
+            attacksRepelledByType: { DDOS: 0, APT: 0, RANSOM: 0 }
+        },
+        topologySnapshots: [],
+        operationId: "OP-" + Math.random().toString(36).substr(2, 9).toUpperCase()
+    };
+
+    const themes = ['dark', 'solarized', 'eclipse'];
+    let currentThemeIdx = 0;
+
+    const initialAssetsData = [
+        { name: "Servidor Web", type: "INFRA" },
+        { name: "Base Datos", type: "INFO" },
+        { name: "Router", type: "INFRA" },
+        { name: "Patentes", type: "INFO" },
+        { name: "Switch", type: "INFRA" }
+    ];
+
+    const cheatCode = ['1', '4', '1', '2'];
+    let cheatProgress = 0;
+
+    window.addEventListener('keydown', (e) => {
+        if(e.key === cheatCode[cheatProgress]) {
+            cheatProgress++;
+            if(cheatProgress === cheatCode.length) {
+                triggerCheat();
+                cheatProgress = 0;
+            }
+        } else {
+            cheatProgress = 0;
+        }
+    });
+
+    function triggerCheat() {
+        log("CÓDIGO LADRÓN ACTIVADO. HACKEANDO SISTEMA...", "warn");
+        
+        game.topologySnapshots = [];
+        
+        for(let i=1; i<=20; i++) {
+            game.round = i;
+            generateLevel(i);
+            
+            // Simular defensas para la foto
+            game.assets.forEach(a => {
+                if(Math.random()>0.5) {
+                    game.towers.push({
+                        x: a.x + 40, y: a.y,
+                        type: 'firewall', level: Math.floor(i/2)+1, range: 150
+                    });
+                }
+            });
+            
+            renderScene(); 
+            const dataURL = canvas.toDataURL("image/jpeg", 0.5);
+            
+            game.topologySnapshots.push({
+                round: i,
+                assets: game.assets.length,
+                money: 2000 + (i*500),
+                defenses: game.towers.length,
+                damage: 0,
+                image: dataURL 
+            });
+        }
+
+        game.round = 20;
+        game.money = 999999;
+        game.health = 100;
+        game.metrics = { A:100, C:100, I:100, D:100, Acc:100 };
+        game.roundStats = {
+            enemiesKilled: 500,
+            damageTaken: 0,
+            moneySpent: 25000,
+            towersBuilt: 50,
+            enemiesSpawnedTotal: 500,
+            attacksRepelledByType: { DDOS: 200, APT: 150, RANSOM: 150 }
+        };
+
+        endRound();
+    }
+
+    function loadProgress() {
+        const saved = localStorage.getItem('resiliencia_save');
+        if(saved) {
+            try {
+                const data = JSON.parse(saved);
+                game.round = data.round;
+                game.money = data.money;
+                game.health = data.health;
+                game.metrics = data.metrics;
+                if(data.topologySnapshots) game.topologySnapshots = data.topologySnapshots;
+                log("Progreso recuperado de sesión anterior.", "success");
+                if(game.round > 1) {
+                    game.state = 'PLANNING';
+                    document.getElementById('modal-tutorial').style.display = 'none';
+                    initRound();
+                }
+            } catch(e) { console.error("Error cargando savegame", e); }
+        }
+    }
+
+    function saveProgress() {
+        const data = {
+            round: game.round,
+            money: game.money,
+            health: game.health,
+            metrics: game.metrics,
+            topologySnapshots: game.topologySnapshots
+        };
+        localStorage.setItem('resiliencia_save', JSON.stringify(data));
+    }
+
+    function resize() {
+        w = window.innerWidth;
+        h = window.innerHeight;
+        canvas.width = w;
+        canvas.height = h;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    canvas.addEventListener('wheel', e => {
+        e.preventDefault();
+        const zoomSpeed = 0.1;
+        const delta = -Math.sign(e.deltaY) * zoomSpeed;
+        const newScale = Math.min(Math.max(0.3, scale + delta), 3); 
+        
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        
+        const worldX = (mouseX - offsetX) / scale;
+        const worldY = (mouseY - offsetY) / scale;
+        
+        offsetX = mouseX - worldX * newScale;
+        offsetY = mouseY - worldY * newScale;
+        scale = newScale;
+    });
+
+    canvas.addEventListener('mousedown', e => {
+        if(e.button === 2) { 
+            game.selectedTool = null;
+            document.querySelectorAll('.btn').forEach(b => b.classList.remove('selected'));
+            return;
+        }
+        if(e.button === 0 && !game.selectedTool) { 
+            isDragging = true;
+            startDragX = e.clientX - offsetX;
+            startDragY = e.clientY - offsetY;
+        }
+        handleGameClick(e);
+    });
+
+    window.addEventListener('mousemove', e => {
+        if(isDragging) {
+            offsetX = e.clientX - startDragX;
+            offsetY = e.clientY - startDragY;
+        }
+        
+        const rect = canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+        worldMX = (mx - offsetX) / scale;
+        worldMY = (my - offsetY) / scale;
+
+        updateTooltip(e.clientX, e.clientY);
+    });
+
+    window.addEventListener('mouseup', () => { isDragging = false; });
+    canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+    function cycleTheme() {
+        currentThemeIdx = (currentThemeIdx + 1) % themes.length;
+        const theme = themes[currentThemeIdx];
+        document.body.setAttribute('data-theme', theme);
+        const btn = document.getElementById('theme-btn');
+        if(theme === 'dark') btn.innerText = '🌙';
+        if(theme === 'solarized') btn.innerText = '☀️';
+        if(theme === 'eclipse') btn.innerText = '🌑';
+    }
+
+    function updateTooltip(screenX, screenY) {
+        if(game.state !== 'PLANNING' && game.state !== 'WAVE') return;
+        
+        let hover = false;
+        for(let t of game.towers) {
+            if(Math.hypot(t.x - worldMX, t.y - worldMY) < 20) {
+                const upgradeCost = Math.floor(200 * Math.pow(1.5, t.level));
+                let html = `<strong>${t.type.toUpperCase()}</strong> (Nivel ${t.level})<br>`;
+                html += `Rango: ${Math.floor(t.range)}<br>`;
+                if(game.state === 'PLANNING' && !game.selectedTool) {
+                    html += `<span style="color:var(--accent-color)">Click para MEJORAR (${upgradeCost} CR)</span>`;
+                }
+                tooltip.innerHTML = html;
+                tooltip.style.display = 'block';
+                tooltip.style.left = (screenX + 15) + 'px';
+                tooltip.style.top = (screenY + 15) + 'px';
+                hover = true;
+            }
+        }
+        if(!hover) {
+            for(let a of game.assets) {
+                if(Math.hypot(a.x - worldMX, a.y - worldMY) < 30) {
+                    tooltip.innerHTML = `<strong>${a.name}</strong><br>Tipo: ${a.type}<br>Estado: ${a.encrypted ? '🔒 Cifrado' : 'Normal'}`;
+                    tooltip.style.display = 'block';
+                    tooltip.style.left = (screenX + 15) + 'px';
+                    tooltip.style.top = (screenY + 15) + 'px';
+                    hover = true;
+                }
+            }
+        }
+        
+        if(!hover) tooltip.style.display = 'none';
+    }
+
+    function log(msg, type='normal') {
+        const c = document.getElementById('logs-container');
+        const el = document.createElement('div');
+        el.className = 'log-entry';
+        if(type==='warn') el.classList.add('log-warn');
+        if(type==='success') el.classList.add('log-success');
+        const time = new Date().toLocaleTimeString().split(' ')[0];
+        el.innerHTML = `<span style="opacity:0.5">[${time}]</span> ${msg}`;
+        c.prepend(el);
+    }
+
+    function updateUI() {
+        document.getElementById('money-display').innerText = Math.floor(game.money);
+        document.getElementById('health-display').innerText = Math.floor(game.health) + "%";
+        document.getElementById('round-display').innerText = `Ronda ${game.round} / ${game.maxRounds}`;
+        ['A','C','I','D','Acc'].forEach(k => {
+            const el = document.getElementById(`val-${k}`);
+            const val = game.metrics[k];
+            el.innerText = Math.floor(val) + "%";
+            el.style.color = val > 70 ? 'var(--success-color)' : (val > 40 ? 'var(--warning-color)' : 'var(--danger-color)');
+        });
+        
+        const btnBack = document.getElementById('btn-backup');
+        if(game.backup) {
+            btnBack.innerText = "✅ ACTIVO";
+            btnBack.disabled = true;
+            btnBack.style.opacity = 0.7;
+        } else {
+            btnBack.innerText = "💾 BACKUP (500)";
+            btnBack.disabled = false;
+            btnBack.style.opacity = 1;
+        }
+    }
+
+    function updateThreatIntel() {
+        const panel = document.getElementById('intel-content');
+        panel.innerHTML = '';
+        
+        const level = Math.max(1, Math.floor(game.round / 2));
+        
+        const threats = [];
+        threats.push({ name: "DDoS", icon: "vis-enemy-ddos" });
+        if(game.round >= 3) threats.push({ name: "Ransom", icon: "vis-enemy-ransom" });
+        if(game.round >= 6) threats.push({ name: "APT", icon: "vis-enemy-apt" });
+        
+        threats.forEach(t => {
+            const div = document.createElement('div');
+            div.className = 'intel-row';
+            div.innerHTML = `
+                <div class="icon-box ${t.icon}" style="width:20px; height:20px;"></div>
+                <span>${t.name}</span>
+                <span class="intel-level">Nvl ${level}</span>
+            `;
+            panel.appendChild(div);
+        });
+    }
+
+    function showTutorial() {
+        document.getElementById('modal-tutorial').style.display = 'block';
+        if(game.state !== 'INIT') {
+            document.getElementById('btn-tut-action').style.display = 'none';
+            document.getElementById('btn-tut-close').style.display = 'block';
+        } else {
+            document.getElementById('btn-tut-action').style.display = 'block';
+            document.getElementById('btn-tut-close').style.display = 'none';
+        }
+    }
+
+    function closeTutorial() {
+        document.getElementById('modal-tutorial').style.display = 'none';
+    }
+
+    function confirmReset() {
+        document.getElementById('modal-reset').style.display = 'block';
+    }
+
+    function resetGame() {
+        localStorage.removeItem('resiliencia_save');
+        location.reload();
+    }
+
+    function startClassificationPhase() {
+        document.getElementById('modal-tutorial').style.display = 'none';
+        const saved = localStorage.getItem('resiliencia_save');
+        if(saved && JSON.parse(saved).round > 1) {
+            loadProgress();
+        } else {
+            document.getElementById('modal-classification').style.display = 'block';
+            const list = document.getElementById('classification-list');
+            list.innerHTML = '';
+            initialAssetsData.forEach((item, i) => {
+                const row = document.createElement('div');
+                row.className = 'class-row';
+                row.innerHTML = `
+                    <strong>${item.name}</strong>
+                    <div>
+                        <label style="margin-right:15px;"><input type="radio" name="class_${i}" value="INFRA"> Infraestructura</label>
+                        <label><input type="radio" name="class_${i}" value="INFO"> Información</label>
+                    </div>
+                `;
+                list.appendChild(row);
+            });
+        }
+    }
+
+    function validateClassification() {
+        let correct = 0;
+        let total = initialAssetsData.length;
+        for(let i=0; i<total; i++) {
+            const radios = document.getElementsByName(`class_${i}`);
+            let val = null;
+            for(let r of radios) if(r.checked) val = r.value;
+            if(!val) { alert("Por favor, clasifique todos los activos."); return; }
+            if(val === initialAssetsData[i].type) correct++;
+        }
+        if(correct === total) {
+            log("Clasificación Perfecta. Bono +500 CR.", "success");
+            game.money += 500;
+        } else {
+            log(`Clasificación Incorrecta. Vulnerabilidades detectadas.`, "warn");
+        }
+        document.getElementById('modal-classification').style.display = 'none';
+        initRound();
+    }
+
+    function generateLevel(round) {
+        game.assets = []; game.towers = []; game.enemies = []; game.projectiles = []; game.particles = [];
+        game.backup = false;
+        
+        game.roundStats = {
+            enemiesKilled: 0, damageTaken: 0, moneySpent: 0, towersBuilt: 0, enemiesSpawnedTotal: 0,
+            attacksRepelledByType: { DDOS: 0, APT: 0, RANSOM: 0 }
+        };
+        
+        scale = 0.8; 
+        offsetX = w/2 - (game.mapWidth*scale)/2;
+        offsetY = h/2 - (game.mapHeight*scale)/2;
+
+        const coreX = game.mapWidth / 2;
+        const coreY = game.mapHeight / 2;
+        game.assets.push({ 
+            id: 0, x: coreX, y: coreY, 
+            type: 'INFRA', name: 'CORE ROUTER', 
+            encrypted: false, connections: [] 
+        });
+
+        const numDist = Math.min(4, 2 + Math.floor(round / 5)); 
+        const distRadius = 350; 
+        const distNodes = [];
+        
+        for(let i=0; i<numDist; i++) {
+            const angle = (Math.PI * 2 / numDist) * i;
+            const x = coreX + Math.cos(angle) * distRadius;
+            const y = coreY + Math.sin(angle) * distRadius;
+            
+            const distNode = {
+                id: game.assets.length,
+                x: x, y: y,
+                type: 'INFRA', name: `Switch Dist ${i+1}`,
+                encrypted: false, connections: [0] 
+            };
+            game.assets.push(distNode);
+            distNodes.push(distNode);
+        }
+
+        const numEndpoints = 3 + round; 
+        
+        for(let i=0; i<numEndpoints; i++) {
+            const parent = distNodes[i % distNodes.length];
+            
+            let ok = false, x, y;
+            let safety = 0;
+
+            while(!ok && safety < 200) {
+                const angle = Math.random() * Math.PI * 2;
+                const dist = 200 + Math.random() * 100; 
+                x = parent.x + Math.cos(angle) * dist;
+                y = parent.y + Math.sin(angle) * dist;
+
+                ok = true;
+                for(let a of game.assets) {
+                    if(Math.hypot(a.x - x, a.y - y) < 100) ok = false; 
+                }
+                safety++;
+            }
+
+            const type = Math.random() > 0.4 ? 'INFO' : 'INFRA';
+            const name = type === 'INFO' ? `Datos ${i+1}` : `Srv ${i+1}`;
+
+            game.assets.push({
+                id: game.assets.length,
+                x: x, y: y,
+                type: type, name: name,
+                encrypted: false, connections: [parent.id] 
+            });
+        }
+    }
+
+    function initRound() {
+        game.state = 'PLANNING';
+        document.getElementById('controls-bar').style.display = 'flex';
+        
+        game.health = 100;
+        game.metrics = { A: 100, C: 100, I: 100, D: 100, Acc: 100 };
+
+        generateLevel(game.round);
+        updateThreatIntel();
+        log(`--- FASE DE PLANIFICACIÓN RONDA ${game.round} ---`);
+        
+        game.money += 1000 + (game.round * 250);
+        
+        updateUI();
+    }
+
+    function setTool(tool) {
+        game.selectedTool = tool;
+        document.querySelectorAll('.btn').forEach(b => b.classList.remove('selected'));
+        const buttons = Array.from(document.querySelectorAll('.btn'));
+        const target = buttons.find(b => b.onclick.toString().includes(tool));
+        if(target) target.classList.add('selected');
+    }
+
+    function purchaseBackup() {
+        if(game.money >= 500) {
+            game.money -= 500;
+            game.roundStats.moneySpent += 500;
+            game.backup = true;
+            log("Respaldo adquirido. Resiliencia aumentada.", "success");
+            updateUI();
+        } else {
+            log("Fondos insuficientes.", "warn");
+        }
+    }
+
+    function handleGameClick(e) {
+        if(game.state !== 'PLANNING' && game.state !== 'WAVE') return;
+        if(e.button !== 0) return; 
+
+        if(game.selectedTool) {
+            if(game.selectedTool === 'encrypt') {
+                const asset = game.assets.find(a => Math.hypot(a.x - worldMX, a.y - worldMY) < 40);
+                if(asset) {
+                    if(asset.type === 'INFRA') log("Solo se cifra la INFORMACIÓN.", "warn");
+                    else if(asset.encrypted) log("Activo ya cifrado.", "warn");
+                    else if(game.money >= 150) {
+                        game.money -= 150;
+                        game.roundStats.moneySpent += 150;
+                        asset.encrypted = true;
+                        log("Activo cifrado correctamente.", "success");
+                        game.selectedTool = null; document.querySelectorAll('.btn').forEach(b => b.classList.remove('selected'));
+                    } else log("Faltan créditos.", "warn");
+                }
+                return;
+            }
+
+            if(['firewall', 'iam'].includes(game.selectedTool)) {
+                const collides = game.assets.some(a => Math.hypot(a.x - worldMX, a.y - worldMY) < 50) ||
+                                 game.towers.some(t => Math.hypot(t.x - worldMX, t.y - worldMY) < 40);
+                const cost = game.selectedTool === 'firewall' ? 200 : 300;
+
+                if(!collides && game.money >= cost) {
+                    game.money -= cost;
+                    game.roundStats.moneySpent += cost;
+                    game.roundStats.towersBuilt++;
+                    game.towers.push({
+                        x: worldMX, y: worldMY,
+                        type: game.selectedTool,
+                        level: 1,
+                        range: 150,
+                        cooldown: 0,
+                        maxCooldown: game.selectedTool === 'firewall' ? 20 : 40
+                    });
+                    log(`${game.selectedTool.toUpperCase()} desplegado.`);
+                    game.selectedTool = null; document.querySelectorAll('.btn').forEach(b => b.classList.remove('selected'));
+                } else {
+                    if(collides) log("Ubicación no válida.", "warn");
+                    else log("Faltan créditos.", "warn");
+                }
+            }
+            updateUI();
+            return;
+        }
+
+        const tower = game.towers.find(t => Math.hypot(t.x - worldMX, t.y - worldMY) < 25);
+        if(tower) {
+            const upgradeCost = Math.floor(200 * Math.pow(1.5, tower.level));
+            if(game.money >= upgradeCost) {
+                game.money -= upgradeCost;
+                game.roundStats.moneySpent += upgradeCost;
+                tower.level++;
+                tower.range += 15;
+                tower.maxCooldown = Math.max(5, tower.maxCooldown - 2);
+                log(`Torre mejorada a Nivel ${tower.level}.`, "success");
+                updateUI();
+            } else {
+                log(`Necesitas ${upgradeCost} CR para mejorar.`, "warn");
+            }
+        }
+    }
+
+    function startWave() {
+        game.state = 'WAVE';
+        document.getElementById('controls-bar').style.display = 'none';
+        game.selectedTool = null;
+        
+        game.enemiesToSpawn = 5 + Math.floor(game.round * 1.5); 
+        game.roundStats.enemiesSpawnedTotal = game.enemiesToSpawn;
+        game.spawnTimer = 0;
+        log(`!!! OLEADA ${game.round} INICIADA !!!`, "warn");
+    }
+
+    function spawnEnemy() {
+        const rand = Math.random();
+        let type = 'DDOS', name = "DDoS Bot", color = '#ef4444';
+        
+        if(game.round >= 3 && rand > 0.5) { type = 'RANSOM'; name = "Ransomware"; color = '#84cc16'; }
+        if(game.round >= 6 && rand > 0.8) { type = 'APT'; name = "APT"; color = '#d946ef'; }
+
+        const targets = game.assets.filter(a => 
+            (type === 'DDOS' && a.type === 'INFRA') || 
+            (type !== 'DDOS' && a.type === 'INFO')
+        );
+        
+        if(targets.length === 0) return;
+        const target = targets[Math.floor(Math.random() * targets.length)];
+
+        let ex, ey;
+        if(Math.random() > 0.5) { ex = Math.random()>0.5 ? game.mapWidth : 0; ey = Math.random() * game.mapHeight; }
+        else { ex = Math.random() * game.mapWidth; ey = Math.random()>0.5 ? game.mapHeight : 0; }
+
+        const level = Math.max(1, Math.floor(game.round / 2));
+
+        game.enemies.push({
+            x: ex, y: ey, type, name: `${name} Lv${level}`,
+            target, level,
+            hp: 100 + (game.round * 30), maxHp: 100 + (game.round * 30),
+            speed: type === 'APT' ? 1.5 : 2.5,
+            color
+        });
+    }
+
+    function updateGame() {
+        if(game.state !== 'WAVE') return;
+
+        if(game.enemiesToSpawn > 0) {
+            game.spawnTimer++;
+            if(game.spawnTimer > 60) { spawnEnemy(); game.enemiesToSpawn--; game.spawnTimer = 0; }
+        } else if (game.enemies.length === 0) {
+            endRound(true);
+        }
+
+        game.towers.forEach(t => {
+            if(t.cooldown > 0) t.cooldown--;
+            else {
+                const target = game.enemies.find(e => Math.hypot(e.x - t.x, e.y - t.y) < t.range);
+                if(target) {
+                    game.projectiles.push({ x: t.x, y: t.y, tx: target.x, ty: target.y, type: t.type, level: t.level });
+                    t.cooldown = t.maxCooldown;
+                }
+            }
+        });
+
+        for(let i=game.projectiles.length-1; i>=0; i--) {
+            let p = game.projectiles[i];
+            let angle = Math.atan2(p.ty - p.y, p.tx - p.x);
+            p.x += Math.cos(angle) * 15;
+            p.y += Math.sin(angle) * 15;
+
+            let hit = false;
+            for(let e of game.enemies) {
+                if(Math.hypot(e.x - p.x, e.y - p.y) < 20) {
+                    let dmg = 10;
+                    let effective = (p.type === 'firewall' && e.type === 'DDOS') || (p.type === 'iam' && e.type !== 'DDOS');
+                    
+                    if(effective) {
+                        if(p.level >= e.level) dmg = e.maxHp; 
+                        else dmg = 50 + (p.level * 10); 
+                    } else {
+                        dmg = 5; 
+                    }
+
+                    e.hp -= dmg;
+                    
+                    game.particles.push({x: e.x, y: e.y, life: 8, color: '#fff'});
+                    
+                    if(e.hp <= 0) {
+                        for(let k=0; k<20; k++) {
+                            const pColor = Math.random()>0.5 ? e.color : (Math.random()>0.5 ? '#fbbf24' : '#ef4444');
+                            game.particles.push({
+                                x: e.x, y: e.y, 
+                                life: 50, color: pColor, size: 5+Math.random()*15,
+                                vx: (Math.random()-0.5)*12, vy: (Math.random()-0.5)*12
+                            });
+                        }
+                        game.money += 20 * e.level;
+                        game.roundStats.enemiesKilled++;
+                        game.roundStats.attacksRepelledByType[e.type]++;
+                        game.enemies = game.enemies.filter(en => en !== e);
+                    }
+                    hit = true;
+                    break;
+                }
+            }
+            if(hit || p.x < 0 || p.x > game.mapWidth || p.y < 0 || p.y > game.mapHeight) game.projectiles.splice(i, 1);
+        }
+
+        for(let i=game.enemies.length-1; i>=0; i--) {
+            let e = game.enemies[i];
+            let angle = Math.atan2(e.target.y - e.y, e.target.x - e.x);
+            e.x += Math.cos(angle) * e.speed;
+            e.y += Math.sin(angle) * e.speed;
+
+            if(Math.hypot(e.x - e.target.x, e.y - e.target.y) < 30) {
+                impactAsset(e.target, e.type);
+                game.enemies.splice(i, 1);
+            }
+        }
+
+        if(Math.random() < (0.0005 * game.round)) triggerPhysicalFailure();
+
+        updateUI();
+        checkGameOver();
+    }
+
+    function impactAsset(asset, type) {
+        game.particles.push({
+            x: asset.x, y: asset.y, 
+            life: 5, 
+            color: 'rgba(255, 50, 50, 0.8)', 
+            size: 30,
+            grow: true
+        });
+
+        if(type === 'DDOS') {
+            game.metrics.D -= 10; game.health -= 5;
+            game.roundStats.damageTaken += 10;
+            log("¡DDoS impacta Infraestructura!", "warn");
+        } else if(type === 'APT') {
+            if(asset.encrypted) log("APT bloqueada por cifrado.", "success");
+            else {
+                game.metrics.C -= 15; game.metrics.A -= 5;
+                game.roundStats.damageTaken += 5;
+                log("¡Datos robados por APT!", "warn");
+            }
+        } else if(type === 'RANSOM') {
+            if (asset.type !== 'INFO') {
+                log("Ransomware rebotó en hardware.", "success");
+                return; 
+            }
+            
+            if(asset.encrypted) {
+                log("Ransomware bloqueado por Cifrado.", "success");
+                return; 
+            }
+            
+            if(game.backup) {
+                game.metrics.D -= 2;
+                log("Ransomware recuperado por Backup.", "success");
+            } else {
+                game.metrics.I -= 20; game.metrics.D -= 10;
+                game.roundStats.damageTaken += 20;
+                log("¡Datos secuestrados! Sin defensas.", "warn");
+            }
+        }
+    }
+
+    function triggerPhysicalFailure() {
+        log("!!! ALERTA: FALLO DE HARDWARE !!!", "warn");
+        if(game.backup) log("Sistemas redundantes activos.", "success");
+        else {
+            game.health -= 25; game.metrics.D -= 20;
+            game.roundStats.damageTaken += 25;
+            log("Daño crítico por falta de redundancia.", "warn");
+        }
+    }
+
+    function checkGameOver() {
+        const critical = Object.values(game.metrics).some(v => v <= 0) || game.health <= 0;
+        if(critical) {
+            game.state = 'GAMEOVER';
+            document.getElementById('end-title').innerText = "SISTEMA COMPROMETIDO";
+            document.getElementById('end-title').style.color = "var(--danger-color)";
+            document.getElementById('end-msg').innerText = `La organización ha caído en la Ronda ${game.round}.`;
+            document.getElementById('next-round-btn').innerText = "REINTENTAR RONDA (Reset 100%)";
+            document.getElementById('next-round-btn').onclick = window.retryRound;
+            document.getElementById('modal-endround').style.display = 'block';
+        }
+    }
+
+    function generatePDFReport(instantWin = false) {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        
+        doc.setFontSize(22);
+        doc.setTextColor(20, 20, 20);
+        doc.text("INFORME DE GUERRA: PROTOCOLO RESILIENCIA", 20, 20);
+        
+        doc.setFontSize(12);
+        doc.text(`ID Operación: ${game.operationId}`, 20, 30);
+        doc.text(`Fecha: ${new Date().toLocaleDateString()}`, 20, 40);
+        doc.text(`Estado de Misión: ${instantWin ? "VICTORIA TÁCTICA ÓPTIMA (Simulada)" : "COMPLETADA"}`, 20, 50);
+
+        doc.setLineWidth(0.5);
+        doc.line(20, 55, 190, 55);
+
+        let y = 70;
+
+        doc.setFontSize(16);
+        doc.text("RESUMEN EJECUTIVO", 20, y);
+        y += 10;
+        doc.setFontSize(12);
+        doc.text(`Total de Rondas Sobrevividas: ${game.round}`, 20, y); y+=7;
+        doc.text(`Amenazas Neutralizadas: ${game.roundStats.enemiesKilled}`, 20, y); y+=7;
+        doc.text(`Inversión Total en Defensa: ${game.roundStats.moneySpent} CR`, 20, y); y+=7;
+        doc.text(`Infraestructura Defensiva: ${game.roundStats.towersBuilt} Unidades desplegadas`, 20, y); y+=15;
+
+        doc.setFontSize(16);
+        doc.text("ANÁLISIS DE AMENAZAS", 20, y);
+        y += 10;
+        doc.setFontSize(12);
+        doc.text(`Ataques DDoS (Infraestructura): ${game.roundStats.attacksRepelledByType.DDOS}`, 20, y); y+=7;
+        doc.text(`Intrusiones APT (Confidencialidad): ${game.roundStats.attacksRepelledByType.APT}`, 20, y); y+=7;
+        doc.text(`Intentos Ransomware (Integridad): ${game.roundStats.attacksRepelledByType.RANSOM}`, 20, y); y+=15;
+
+        if(game.topologySnapshots && game.topologySnapshots.length > 0) {
+            doc.addPage();
+            doc.setFontSize(16);
+            doc.text("EVIDENCIA VISUAL: EVOLUCIÓN DE TOPOLOGÍA", 20, 20);
+            let snapY = 40;
+            
+            game.topologySnapshots.forEach((snap, i) => {
+                if(snapY > 250) { doc.addPage(); snapY = 20; }
+                doc.setFontSize(12);
+                doc.text(`Ronda ${snap.round} | Activos: ${snap.assets} | Defensas: ${snap.defenses}`, 20, snapY);
+                if(snap.image) {
+                    try {
+                        doc.addImage(snap.image, 'JPEG', 20, snapY + 5, 170, 100);
+                        snapY += 115;
+                    } catch(e) { console.error("Error adding image to PDF", e); }
+                } else {
+                    doc.text("[Imagen no disponible]", 20, snapY + 20);
+                    snapY += 40;
+                }
+            });
+        }
+        
+        doc.save(`Informe_${game.operationId}.pdf`);
+    }
+
+    function generatePedagogicalReport() {
+        const stats = game.roundStats;
+        let insight = "<h3>Análisis de Resiliencia Post-Incidente</h3>";
+        
+        if (stats.damageTaken > 50) {
+            insight += "<p><strong>Situación Crítica:</strong> Sus sistemas sufrieron daños severos. Recuerde: La resiliencia no es evitar ataques, es absorber el impacto. Necesita más capas de <strong>Defensa en Profundidad</strong>.</p>";
+        } else if (stats.damageTaken > 0) {
+            insight += "<p><strong>Respuesta Aceptable:</strong> Hubo impactos, pero el núcleo del negocio sobrevivió. Siga invirtiendo en redundancia.</p>";
+        } else {
+            insight += "<p><strong>Defensa Impecable:</strong> Su postura de ciberseguridad es robusta. Ha logrado una disuasión efectiva.</p>";
+        }
+
+        insight += "<ul>";
+
+        if (stats.attacksRepelledByType.RANSOM > 0) {
+            if (!game.backup) {
+                insight += "<li style='color:var(--danger-color)'><strong>Ransomware:</strong> Operó sin copias de seguridad (Backups). Esto es un punto único de fallo crítico. La pérdida de datos es irreversible sin redundancia.</li>";
+            } else {
+                insight += "<li style='color:var(--success-color)'><strong>Ransomware:</strong> Su inversión en Backups garantizó la continuidad del negocio (Disponibilidad) a pesar de la infección.</li>";
+            }
+        }
+
+        if (stats.attacksRepelledByType.DDOS > 0) {
+            insight += "<li><strong>DDoS:</strong> Ataques volumétricos detectados. Sus Firewalls actuaron como primera línea de defensa para la Infraestructura física.</li>";
+        }
+
+        if (stats.attacksRepelledByType.APT > 0) {
+             insight += "<li><strong>APTs (Amenazas Persistentes Avanzadas):</strong> Intentos de robo de información sigilosos. El cifrado y el control de identidad (IAM) fueron clave para proteger la Confidencialidad.</li>";
+        }
+        
+        insight += "</ul>";
+        insight += "<p><em>Lección del Manual: 'Lo crítico es la Información, no la infraestructura'. Asegure primero las joyas (Datos) antes que la caja fuerte (Hardware).</em></p>";
+
+        return insight;
+    }
+
+    function captureTopologySnapshot() {
+        const dataURL = canvas.toDataURL("image/jpeg", 0.5);
+        
+        if(!game.topologySnapshots) game.topologySnapshots = [];
+        
+        game.topologySnapshots.push({
+            round: game.round,
+            assets: game.assets.length,
+            money: game.money,
+            defenses: game.towers.length,
+            damage: game.roundStats.damageTaken,
+            image: dataURL
+        });
+    }
+
+    function endRound() {
+        captureTopologySnapshot(); 
+
+        if(game.round === game.maxRounds) {
+            game.state = 'GAMEOVER';
+            document.getElementById('end-title').innerText = "CIBERRESILIENCIA ALCANZADA";
+            document.getElementById('end-title').style.color = "var(--success-color)";
+            document.getElementById('end-msg').innerText = "Has protegido los activos vitales durante 20 ciclos.";
+            document.getElementById('end-id').innerText = "ID OPERACIÓN: " + game.operationId;
+            
+            document.getElementById('btn-download-pdf').style.display = 'inline-block';
+            document.getElementById('next-round-btn').innerText = "REINICIAR SIMULACIÓN";
+            document.getElementById('next-round-btn').onclick = window.confirmReset;
+            
+            document.getElementById('modal-endround').style.display = 'block';
+            
+            setTimeout(() => generatePDFReport(false), 1000);
+            
+            return;
+        }
+        game.state = 'END_ROUND';
+        document.getElementById('end-title').innerText = `RONDA ${game.round} COMPLETADA`;
+        document.getElementById('end-id').innerText = "";
+        document.getElementById('end-title').style.color = "var(--text-color)";
+        document.getElementById('end-msg').innerText = "Sistemas recuperados al 100%. Preparando siguiente ciclo.";
+        
+        const infraCount = game.assets.filter(a=>a.type==='INFRA').length;
+        const infoCount = game.assets.filter(a=>a.type==='INFO').length;
+        const avgLevel = game.towers.length > 0 
+            ? (game.towers.reduce((acc, t) => acc + t.level, 0) / game.towers.length).toFixed(1) 
+            : 0;
+
+        document.getElementById('stat-topology').innerText = `${game.assets.length} Nodos (${infraCount} Infra / ${infoCount} Info)`;
+        document.getElementById('stat-health').innerText = `${Math.floor(game.health)}% (Backup: ${game.backup ? 'SÍ' : 'NO'})`;
+        document.getElementById('stat-investment').innerText = `${game.roundStats.moneySpent} CR gastados`;
+        document.getElementById('stat-defenses').innerText = `${game.towers.length} Torres (Nivel Prom. ${avgLevel})`;
+        document.getElementById('stat-combat').innerText = `${game.roundStats.enemiesKilled} Neutralizados / ${game.roundStats.damageTaken} Daño`;
+
+        const insightHtml = generatePedagogicalReport();
+        document.getElementById('pedagogical-insight').innerHTML = insightHtml;
+
+        document.getElementById('btn-download-pdf').style.display = 'none';
+        document.getElementById('next-round-btn').innerText = "SIGUIENTE RONDA";
+        document.getElementById('next-round-btn').onclick = window.nextRound;
+
+        saveProgress();
+
+        document.getElementById('modal-endround').style.display = 'block';
+    }
+
+    window.cycleTheme = cycleTheme;
+    window.setTool = setTool;
+    window.purchaseBackup = purchaseBackup;
+    window.startWave = startWave;
+    window.startClassificationPhase = startClassificationPhase;
+    window.validateClassification = validateClassification;
+    window.showTutorial = showTutorial;
+    window.closeTutorial = closeTutorial;
+    window.confirmReset = confirmReset;
+    window.resetGame = resetGame;
+    window.generatePDFReport = generatePDFReport;
+    
+    window.nextRound = () => {
+        document.getElementById('modal-endround').style.display = 'none';
+        game.round++;
+        initRound();
+    };
+    window.retryRound = () => {
+        document.getElementById('modal-endround').style.display = 'none';
+        game.money = 3000 + (game.round * 100);
+        initRound(); 
+    };
+    window.zoomIn = () => scale = Math.min(3, scale + 0.2);
+    window.zoomOut = () => scale = Math.max(0.3, scale - 0.2);
+    window.resetZoom = () => { scale = 0.8; offsetX = w/2 - (game.mapWidth*scale)/2; offsetY = h/2 - (game.mapHeight*scale)/2; };
+
+    function renderScene() {
+        ctx.clearRect(0, 0, w, h);
+        ctx.save();
+        ctx.translate(offsetX, offsetY);
+        ctx.scale(scale, scale);
+
+        ctx.fillStyle = 'rgba(0,0,0,0.2)';
+        ctx.fillRect(0, 0, game.mapWidth, game.mapHeight);
+        ctx.strokeStyle = getComputedStyle(document.body).getPropertyValue('--grid-color');
+        ctx.lineWidth = 2;
+        ctx.strokeRect(0, 0, game.mapWidth, game.mapHeight);
+
+        ctx.globalAlpha = 0.1;
+        ctx.beginPath();
+        for(let x=0; x<=game.mapWidth; x+=100) { ctx.moveTo(x,0); ctx.lineTo(x,game.mapHeight); }
+        for(let y=0; y<=game.mapHeight; y+=100) { ctx.moveTo(0,y); ctx.lineTo(game.mapWidth,y); }
+        ctx.stroke();
+        ctx.globalAlpha = 1.0;
+
+        ctx.strokeStyle = getComputedStyle(document.body).getPropertyValue('--grid-color');
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        game.assets.forEach(a => {
+            a.connections.forEach(tid => {
+                const t = game.assets.find(as => as.id === tid);
+                if(t) { ctx.moveTo(a.x, a.y); ctx.lineTo(t.x, t.y); }
+            });
+        });
+        ctx.stroke();
+
+        game.towers.forEach(t => {
+            ctx.fillStyle = t.type === 'firewall' ? '#f59e0b' : '#8b5cf6';
+            ctx.beginPath(); ctx.arc(t.x, t.y, 20, 0, Math.PI*2); ctx.fill();
+            
+            if(!game.selectedTool && Math.hypot(t.x - worldMX, t.y - worldMY) < 25) {
+                ctx.beginPath(); ctx.arc(t.x, t.y, t.range, 0, Math.PI*2);
+                ctx.strokeStyle = ctx.fillStyle; ctx.globalAlpha = 0.3; ctx.stroke(); ctx.globalAlpha = 1.0;
+            }
+
+            ctx.fillStyle = '#fff'; ctx.font = '12px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText(t.type === 'firewall' ? '🔥' : '🛡️', t.x, t.y);
+            ctx.font = '10px monospace';
+            ctx.fillText(`Lv${t.level}`, t.x, t.y + 30);
+        });
+
+        game.assets.forEach(a => {
+            const color = a.type === 'INFRA' ? '#64748b' : '#0ea5e9';
+            ctx.fillStyle = color;
+            if(a.type === 'INFRA') ctx.fillRect(a.x-20, a.y-20, 40, 40);
+            else { 
+                ctx.beginPath(); 
+                ctx.moveTo(a.x, a.y-25); ctx.lineTo(a.x+25, a.y); 
+                ctx.lineTo(a.x, a.y+25); ctx.lineTo(a.x-25, a.y); 
+                ctx.fill(); 
+            }
+            
+            ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-color');
+            ctx.font = '14px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText(a.name, a.x, a.y - 35);
+            if(a.encrypted) ctx.fillText('🔒', a.x, a.y - 50);
+        });
+
+        game.enemies.forEach(e => {
+            ctx.fillStyle = e.color;
+            ctx.beginPath(); ctx.arc(e.x, e.y, 12, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#fff'; ctx.font = '12px monospace';
+            ctx.fillText(e.name, e.x, e.y - 20);
+            const pct = e.hp / e.maxHp;
+            ctx.fillStyle = 'red'; ctx.fillRect(e.x-15, e.y-30, 30, 4);
+            ctx.fillStyle = '#10b981'; ctx.fillRect(e.x-15, e.y-30, 30 * pct, 4);
+        });
+
+        if(game.selectedTool && ['firewall', 'iam'].includes(game.selectedTool)) {
+            ctx.beginPath();
+            ctx.arc(worldMX, worldMY, 150, 0, Math.PI*2);
+            ctx.fillStyle = 'rgba(255,255,255,0.1)';
+            ctx.fill();
+            ctx.strokeStyle = 'white';
+            ctx.setLineDash([5,5]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
+        game.projectiles.forEach(p => {
+            ctx.fillStyle = p.type === 'firewall' ? '#f59e0b' : '#8b5cf6';
+            ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, Math.PI*2); ctx.fill();
+        });
+        for(let i=game.particles.length-1; i>=0; i--) {
+            let p = game.particles[i];
+            if(p.vx) { p.x += p.vx; p.y += p.vy; }
+            if(p.grow) p.size += 2;
+            p.life--;
+            ctx.fillStyle = p.color;
+            ctx.globalAlpha = p.life / 30;
+            ctx.beginPath(); ctx.arc(p.x, p.y, p.size||20, 0, Math.PI*2); ctx.fill();
+            ctx.globalAlpha = 1.0;
+            if(p.life <= 0) game.particles.splice(i, 1);
+        }
+
+        ctx.restore();
+    }
+
+    function draw() {
+        renderScene();
+        updateGame();
+        requestAnimationFrame(draw);
+    }
+
+    draw();
+})();
+</script>
+</body>
+</html>
